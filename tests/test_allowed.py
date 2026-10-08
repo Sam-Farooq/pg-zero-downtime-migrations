@@ -108,6 +108,10 @@ ALLOWED: tuple[tuple[str, str], ...] = (
         "BEGIN;\nSET LOCAL lock_timeout = '3s';\nALTER TABLE app.orders ADD COLUMN c integer;\nCOMMIT;",
     ),
     (
+        "a concurrent detach",
+        "ALTER TABLE app.events DETACH PARTITION app.events_2026q1 CONCURRENTLY;",
+    ),
+    (
         "a SELECT is a SELECT",
         "SELECT * FROM pgsafe.preflight();",
     ),

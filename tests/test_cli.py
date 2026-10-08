@@ -72,7 +72,7 @@ def test_a_pragma_problem_fails_the_run_on_its_own(tmp_path, capsys):
 def test_a_directory_is_walked(capsys):
     assert main(["check", "sql/patterns"]) == 1
     out = capsys.readouterr().out
-    assert "14 file(s)" in out
+    assert "16 file(s)" in out
 
 
 def test_json_output_is_sorted_and_parseable(tmp_path, capsys):
@@ -101,14 +101,14 @@ def test_the_runner_can_be_forced_from_the_command_line(tmp_path, capsys):
 def test_rules_prints_every_rule(capsys):
     assert main(["rules"]) == 0
     out = capsys.readouterr().out
-    assert "18 rules" in out
+    assert "20 rules" in out
     assert "volatile_default" in out
 
 
 def test_rules_as_json_is_the_same_set(capsys):
     assert main(["rules", "--format", "json"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert len(payload) == 18
+    assert len(payload) == 20
     assert {entry["severity"] for entry in payload} == {"error", "warning"}
 
 

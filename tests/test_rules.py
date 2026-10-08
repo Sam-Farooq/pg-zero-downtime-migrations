@@ -84,6 +84,18 @@ CASES: tuple[tuple[str, str, str], ...] = (
     ("lock_timeout_disabled", "autocommit", "SET lock_timeout = 0;"),
     ("set_local_outside_transaction", "autocommit", "SET LOCAL lock_timeout = '3s';"),
     ("exclusive_maintenance", "autocommit", TIMEOUT + "VACUUM FULL app.orders;"),
+    (
+        "attach_partition_scans",
+        "autocommit",
+        TIMEOUT
+        + "ALTER TABLE app.events ATTACH PARTITION app.events_2026q3 "
+        + "FOR VALUES FROM ('2026-07-01') TO ('2026-10-01');",
+    ),
+    (
+        "detach_partition_blocks_reads",
+        "autocommit",
+        TIMEOUT + "ALTER TABLE app.events DETACH PARTITION app.events_2026q1;",
+    ),
 )
 
 
@@ -146,6 +158,24 @@ def test_the_same_sequence_in_one_transaction_is_not_allowed():
     )
     fired = sorted({f.rule for f in analyse(sql, runner="transactional").findings})
     assert fired == ["set_not_null_direct", "validate_in_same_transaction"]
+
+
+def test_attach_is_allowed_once_a_check_on_the_partition_is_validated():
+    sql = (
+        TIMEOUT
+        + "ALTER TABLE app.events_2026q3 ADD CONSTRAINT events_2026q3_bound "
+        + "CHECK (occurred_at IS NOT NULL AND occurred_at >= '2026-07-01' "
+        + "AND occurred_at < '2026-10-01') NOT VALID;\n"
+        + "ALTER TABLE app.events_2026q3 VALIDATE CONSTRAINT events_2026q3_bound;\n"
+        + "ALTER TABLE app.events ATTACH PARTITION app.events_2026q3 "
+        + "FOR VALUES FROM ('2026-07-01') TO ('2026-10-01');"
+    )
+    assert analyse(sql, runner="autocommit").findings == []
+
+
+def test_a_finalize_is_not_a_second_detach():
+    sql = TIMEOUT + "ALTER TABLE app.events DETACH PARTITION app.events_2026q1 FINALIZE;"
+    assert analyse(sql, runner="autocommit").findings == []
 
 
 def test_the_runner_decides_whether_concurrently_is_possible():

@@ -27,11 +27,11 @@ ASSERTION_LINE = re.compile(
     r"|col_not_null|col_type_is)\(",
     re.MULTILINE,
 )
-TOTAL_ASSERTIONS = 196
+TOTAL_ASSERTIONS = 218
 
 
 def test_every_pattern_directory_holds_a_runnable_pair(pattern_dirs):
-    assert len(pattern_dirs) == 7
+    assert len(pattern_dirs) == 8
     for directory in pattern_dirs:
         assert (directory / "unsafe.sql").is_file(), directory
         assert (directory / "safe.sql").is_file(), directory
@@ -61,7 +61,7 @@ def test_exactly_one_rule_has_no_safe_form():
 def test_every_lock_form_a_rule_names_is_seeded_in_the_lock_table(repo: Path):
     seed = (repo / LOCK_MATRIX).read_text()
     forms = set(re.findall(r"^    \('([a-z_]+)', '[A-Z ]+'", seed, re.MULTILINE))
-    assert len(forms) >= 25
+    assert len(forms) >= 30
     for rule in RULES:
         if rule.lock_form is None:
             continue

@@ -3,7 +3,7 @@
 --
 -- No BEGIN here: this file reads committed state that the pattern run produced,
 -- and test/run.sh applies it only to the database where the safe halves ran.
-SELECT plan(20);
+SELECT plan(25);
 
 -- 01_add_column_default
 SELECT has_column('app', 'orders', 'is_gift', 'the constant default column is there');
@@ -91,6 +91,33 @@ SELECT ok(
       JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
      WHERE d.adrelid = 'app.orders'::regclass AND a.attname = 'status') LIKE '%placed%',
     'the guarded statement set the default it was meant to set'
+);
+
+-- 08_attach_partition
+SELECT is(
+    (SELECT array_agg(p.partition_name ORDER BY p.partition_name)
+       FROM pgsafe.partitions('app.events') AS p),
+    ARRAY['app.events_2026q2', 'app.events_2026q3'],
+    'the third quarter was attached and the first was detached'
+);
+SELECT is_empty(
+    $$SELECT partition_name FROM pgsafe.pending_detaches()$$,
+    'and the concurrent detach finished rather than being left pending'
+);
+SELECT is(
+    (SELECT count(*) FROM pg_index i WHERE i.indrelid = 'app.events_2026q3'::regclass)::bigint,
+    1::bigint,
+    'the new partition carries the parent index, built concurrently and adopted'
+);
+SELECT is(
+    (SELECT count(*) FROM app.events)::bigint,
+    200::bigint,
+    'the parent now holds the two attached quarters'
+);
+SELECT is(
+    (SELECT count(*) FROM app.events_2026q1)::bigint,
+    100::bigint,
+    'and the detached quarter is still a table with its rows in it'
 );
 
 -- And the point of all of it: nothing was lost on the way through.

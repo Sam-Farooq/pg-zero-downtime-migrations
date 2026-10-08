@@ -111,6 +111,24 @@ class State:
             return self.in_block and self.timeout_tx == self.tx
         return False
 
+    def check_validated_for(self, table: str | None) -> bool:
+        """Was any CHECK on this table validated in an earlier transaction?
+
+        Which is what lets ATTACH PARTITION skip its scan. The linter cannot
+        tell whether the constraint implies the partition bound, so it asks the
+        weaker question and says so in the finding.
+        """
+        if table is None:
+            return False
+        bare = table.split(".")[-1]
+        return any(
+            constraint.kind in ("check", "check_not_null")
+            and constraint.table.split(".")[-1] == bare
+            and constraint.validated_tx is not None
+            and constraint.validated_tx < self.tx
+            for constraint in self.constraints.values()
+        )
+
     def not_null_proved(self, table: str, column: str) -> bool:
         bare = table.split(".")[-1]
         for constraint in self.constraints.values():
@@ -379,6 +397,41 @@ RULES: tuple[Rule, ...] = (
         pattern="07_lock_timeout",
     ),
     Rule(
+        id="attach_partition_scans",
+        severity=ERROR,
+        summary="ATTACH PARTITION scans the table being attached",
+        why=(
+            "PostgreSQL proves every row is inside the bound before it releases the lock, "
+            "holding SHARE UPDATE EXCLUSIVE on the parent and ACCESS EXCLUSIVE on the table "
+            "being attached, and it creates any index the parent has that the partition lacks "
+            "while it is there"
+        ),
+        rewrite=(
+            "add a CHECK matching the bound, including the IS NOT NULL that a range partition "
+            "constraint carries, VALIDATE it in a second transaction, build the parent's "
+            "indexes on the partition concurrently, and then attach: the scan is skipped and "
+            "the indexes are adopted"
+        ),
+        lock_form="attach_partition",
+        pattern="08_attach_partition",
+    ),
+    Rule(
+        id="detach_partition_blocks_reads",
+        severity=ERROR,
+        summary="DETACH PARTITION takes ACCESS EXCLUSIVE on the parent",
+        why=(
+            "the lock is on the parent, so detaching one partition stops reads of every other "
+            "partition as well, including the ones nobody asked to change"
+        ),
+        rewrite=(
+            "DETACH PARTITION ... CONCURRENTLY, outside any transaction block, then check "
+            "pgsafe.pending_detaches(): an interrupted concurrent detach leaves the partition "
+            "attached for some sessions and not for others, and raises nothing"
+        ),
+        lock_form="detach_partition",
+        pattern="08_attach_partition",
+    ),
+    Rule(
         id="exclusive_maintenance",
         severity=ERROR,
         summary="VACUUM FULL, CLUSTER and REINDEX rewrite the table with reads blocked",
@@ -577,6 +630,20 @@ def _check_statement(stmt: Statement, state: State) -> list[tuple[str, str]]:
                 hits.append(("drop_column_breaks_readers", f"{alter.target}.{named}"))
             if action[0] == "RENAME":
                 hits.append(("rename_breaks_readers", " ".join(action[:4]).lower()))
+            if action[:2] == ("ATTACH", "PARTITION"):
+                attached, _ = shapes.read_name(stmt, span[0] + 2)
+                if not state.check_validated_for(attached):
+                    hits.append(
+                        (
+                            "attach_partition_scans",
+                            f"no CHECK on {attached} was validated in an earlier transaction",
+                        )
+                    )
+            if action[:2] == ("DETACH", "PARTITION") and not (
+                "CONCURRENTLY" in action or "FINALIZE" in action
+            ):
+                detached, _ = shapes.read_name(stmt, span[0] + 2)
+                hits.append(("detach_partition_blocks_reads", f"{detached} from {alter.target}"))
 
     if head == "CREATE" and "INDEX" in words:
         target = shapes.index_target(stmt)

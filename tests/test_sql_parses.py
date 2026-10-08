@@ -38,11 +38,11 @@ FILES = sql_files()
 
 def test_the_repository_has_the_sql_it_claims():
     names = {path.as_posix() for path in FILES}
-    assert len(FILES) >= 25, names
+    assert len(FILES) >= 28, names
     assert "sql/lib/01_schema.sql" in names
     assert "test/fixtures.sql" in names
-    assert sum(1 for path in FILES if path.name == "safe.sql") == 7
-    assert sum(1 for path in FILES if path.name == "unsafe.sql") == 7
+    assert sum(1 for path in FILES if path.name == "safe.sql") == 8
+    assert sum(1 for path in FILES if path.name == "unsafe.sql") == 8
 
 
 @pytest.mark.parametrize("path", FILES, ids=[p.as_posix() for p in FILES])
@@ -75,7 +75,7 @@ def test_the_library_is_plpgsql_rather_than_a_pile_of_ddl():
     # library is the part of this repository that is a program, so each of its
     # files declares a function body.
     library = sorted(Path("sql/lib").glob("*.sql"))
-    assert len(library) == 9
+    assert len(library) == 10
     for path in library:
         text = path.read_text().lower()
         assert "language plpgsql" in text or "do $" in text, path
