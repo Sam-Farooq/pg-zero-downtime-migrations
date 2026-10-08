@@ -13,7 +13,7 @@ sql/patterns/NN_name/unsafe.sql    the statement somebody wrote
                      safe.sql      the same change, with the lock accounted for
 sql/lib/*.sql                      the library the safe halves use
 pgsafe/                            the linter, 20 rules, zero dependencies
-test/pgtap/                        218 assertions against a real PostgreSQL 16
+test/pgtap/                        220 assertions against a real PostgreSQL 16
 tests/                             179 tests that need no database
 ```
 
@@ -294,7 +294,7 @@ PL/pgSQL parser over the function bodies that the SQL grammar sees only as strin
 literals. It proves syntax, on a runner with no database. It proves nothing about
 behaviour.
 
-**218 pgTAP assertions across 11 files**, which is the part that needs a server:
+**220 pgTAP assertions across 11 files**, which is the part that needs a server:
 the conflict matrix, the type verdicts, the guards, the plans, the trigger, the
 plan runner, the data assertions, the partition functions, and the end state the
 catalogue leaves behind. The last of those,
@@ -317,7 +317,7 @@ runs: 179 passing, clean under both ruff checks.
 under PostgreSQL's own grammar, and that is all that has happened to it. The
 pgTAP suite is wired into CI, where a container is started, pgTAP is installed
 into it and `test/run.sh` runs, and that is the first place any of this SQL will
-meet a server. Until a run is green, treat the 218 assertions as unproven.
+meet a server. Until a run is green, treat the 220 assertions as unproven.
 
 Nothing in here measured a lock, a duration or a table size:
 

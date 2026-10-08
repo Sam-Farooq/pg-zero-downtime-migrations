@@ -10,12 +10,19 @@ lint:
 	ruff check .
 	ruff format --check .
 
-# The catalogue, through the linter: every safe.sql has to come out clean and
-# every unsafe.sql has to be caught. The exit code is 1 by design, because the
-# unsafe halves are in there, so this target reports rather than gates. The
-# gate is tests/test_catalogue.py, which asserts both halves separately.
+# The catalogue, through the linter. Checking the directory in one go always
+# exits 1, because the unsafe halves are in it, so the two halves are checked
+# separately: the safe ones have to come out clean, and each unsafe one has to
+# be caught by something. This is the same pair of steps CI runs.
 check-catalogue:
-	-pgsafe check sql/patterns
+	pgsafe check sql/patterns/*/safe.sql
+	@for file in sql/patterns/*/unsafe.sql; do \
+	    if pgsafe check "$$file" > /dev/null; then \
+	        echo "$$file passed the linter, which means a rule is missing"; \
+	        exit 1; \
+	    fi; \
+	done
+	@echo "every unsafe half was caught"
 
 # Targets that need a PostgreSQL 16 connection in the PG environment variables.
 install:

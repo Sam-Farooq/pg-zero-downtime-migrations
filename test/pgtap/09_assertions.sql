@@ -1,6 +1,6 @@
 -- The data questions, asked with a SELECT instead of with a lock.
 BEGIN;
-SELECT plan(22);
+SELECT plan(24);
 
 CREATE SCHEMA pgsafe_test;
 CREATE TABLE pgsafe_test.customers (
@@ -140,6 +140,19 @@ SELECT is_empty(
     $$SELECT check_name FROM pgsafe.data_preflight('pgsafe_test.orders', 'reference', 'varchar(20)')
        WHERE NOT ok$$,
     'and all four pass for a widening on a column with no nulls'
+);
+
+-- A type pair the library has no rule for has to come back as a row rather
+-- than as an error, or one unanswerable question takes the whole report with it.
+SELECT lives_ok(
+    $$SELECT * FROM pgsafe.data_preflight('pgsafe_test.orders', 'amount_text', 'numeric(12,2)')$$,
+    'a type change with no rule is reported rather than raised'
+);
+SELECT is(
+    (SELECT p.detail FROM pgsafe.data_preflight('pgsafe_test.orders', 'amount_text', 'numeric(12,2)') AS p
+      WHERE p.check_name = 'rewrite') LIKE 'cast_required:%',
+    true,
+    'with the verdict in front of the reason'
 );
 
 SELECT * FROM finish();

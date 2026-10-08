@@ -221,6 +221,7 @@ DECLARE
     nulls          bigint;
     unconvertible  bigint;
     facts          record;
+    verdict        pgsafe.type_change_verdict;
 BEGIN
     SELECT * INTO facts FROM pgsafe.table_facts(p_table);
 
@@ -251,10 +252,14 @@ BEGIN
                  ELSE format('%s row(s) in %I would be rejected by %s', unconvertible, p_column, p_to_type)
             END;
 
+        -- The verdict is read rather than pgsafe.rewrites(), which raises when
+        -- it has no rule. A report that cannot finish because one of its rows
+        -- has no answer is worse than a row that says so.
+        verdict := pgsafe.column_type_change(p_table, p_column, p_to_type);
         RETURN QUERY SELECT
             'rewrite',
-            NOT pgsafe.rewrites(pgsafe.column_type(p_table, p_column), p_to_type),
-            (pgsafe.column_type_change(p_table, p_column, p_to_type)).reason;
+            verdict.cost IN ('no_change', 'no_rewrite'),
+            format('%s: %s', verdict.cost, verdict.reason);
     END IF;
 END
 $$;
