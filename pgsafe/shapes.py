@@ -151,9 +151,7 @@ def alter_table(stmt: Statement) -> AlterTable | None:
 
 def action_words(stmt: Statement, span: tuple[int, int]) -> tuple[str, ...]:
     first, last = span
-    return tuple(
-        token.text.upper() for token in stmt.tokens[first:last] if token.kind == "word"
-    )
+    return tuple(token.text.upper() for token in stmt.tokens[first:last] if token.kind == "word")
 
 
 def action_is(stmt: Statement, span: tuple[int, int], *words: str) -> bool:

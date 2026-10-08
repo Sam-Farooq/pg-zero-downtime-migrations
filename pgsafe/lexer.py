@@ -207,9 +207,7 @@ def lex(text: str, path: str = "<text>", runner: str | None = None) -> Script:
         if tokens:
             begin = start_offset if start_offset is not None else tokens[0].start
             raw = text[begin:end]
-            rebased = tuple(
-                Token(t.kind, t.text, t.start - begin, t.end - begin, t.line) for t in tokens
-            )
+            rebased = tuple(Token(t.kind, t.text, t.start - begin, t.end - begin, t.line) for t in tokens)
             pragmas = [p for c in comments for p in parse_pragmas(c)]
             statements.append(
                 Statement(

@@ -18,7 +18,9 @@ def render_text(analyses: list[Analysis]) -> str:
     lines: list[str] = []
     for analysis in analyses:
         declared = "declared" if analysis.runner_declared else "assumed"
-        lines.append(f"{analysis.path}: {analysis.statements} statements, runner {analysis.runner} ({declared})")
+        lines.append(
+            f"{analysis.path}: {analysis.statements} statements, runner {analysis.runner} ({declared})"
+        )
         for problem in analysis.problems:
             lines.append(f"  pragma  line {problem.line}  {problem.message}")
         for finding in analysis.findings:

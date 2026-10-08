@@ -238,7 +238,10 @@ RULES: tuple[Rule, ...] = (
         id="drop_index_without_concurrently",
         severity=ERROR,
         summary="DROP INDEX takes ACCESS EXCLUSIVE",
-        why="dropping an index blocks reads as well as writes, so undoing a mistake is as blocking as making it",
+        why=(
+            "dropping an index blocks reads as well as writes, so undoing a mistake is as "
+            "blocking as making it"
+        ),
         rewrite="DROP INDEX CONCURRENTLY, outside any transaction block",
         lock_form="drop_index",
         pattern="03_create_index",
@@ -480,13 +483,17 @@ def _constraint_from_action(stmt: Statement, span: tuple[int, int], table: str, 
     elif "UNIQUE" in words or ("PRIMARY" in words and "KEY" in words):
         kind = "unique"
     not_valid = _has_not_valid(words)
-    return Constraint(
-        name=name or "<unnamed>",
-        table=table,
-        column=column,
-        kind=kind,
-        added_tx=tx,
-    ), kind, not_valid
+    return (
+        Constraint(
+            name=name or "<unnamed>",
+            table=table,
+            column=column,
+            kind=kind,
+            added_tx=tx,
+        ),
+        kind,
+        not_valid,
+    )
 
 
 def _has_not_valid(words: tuple[str, ...]) -> bool:
@@ -507,9 +514,7 @@ def _check_statement(stmt: Statement, state: State) -> list[tuple[str, str]]:
         if token.kind == "word" and depths[position] == 0
     }
 
-    if "CONCURRENTLY" in top_level_words and (
-        state.in_block or state.runner == "transactional"
-    ):
+    if "CONCURRENTLY" in top_level_words and (state.in_block or state.runner == "transactional"):
         where = (
             "inside an explicit BEGIN block"
             if state.in_block
@@ -523,9 +528,7 @@ def _check_statement(stmt: Statement, state: State) -> list[tuple[str, str]]:
             action = shapes.action_words(stmt, span)
             if not action:
                 continue
-            if action[:2] == ("ADD", "COLUMN") or (
-                action[0] == "ADD" and action[1] not in ("CONSTRAINT",)
-            ):
+            if action[:2] == ("ADD", "COLUMN") or (action[0] == "ADD" and action[1] not in ("CONSTRAINT",)):
                 expression = shapes.default_expression(stmt, span)
                 if shapes.is_volatile_default(expression):
                     hits.append(("volatile_default", f"the default is {expression}"))
@@ -533,14 +536,14 @@ def _check_statement(stmt: Statement, state: State) -> list[tuple[str, str]]:
                     hits.append(("identity_column_added", ""))
             if action[:2] == ("ALTER", "COLUMN"):
                 named, _ = shapes.read_name(stmt, span[0] + 2)
-                if "NOT" in action and "NULL" in action and "SET" in action:
-                    if not state.not_null_proved(alter.target, named or ""):
-                        hits.append(
-                            (
-                                "set_not_null_direct",
-                                f"no validated CHECK proves {alter.target}.{named} in an earlier transaction",
-                            )
+                sets_not_null = "NOT" in action and "NULL" in action and "SET" in action
+                if sets_not_null and not state.not_null_proved(alter.target, named or ""):
+                    hits.append(
+                        (
+                            "set_not_null_direct",
+                            f"no validated CHECK proves {alter.target}.{named} in an earlier tx",
                         )
+                    )
                 if "TYPE" in action:
                     target_type = _type_after(stmt, span)
                     hits.append(
@@ -580,9 +583,8 @@ def _check_statement(stmt: Statement, state: State) -> list[tuple[str, str]]:
         if not state.is_new(target) and "CONCURRENTLY" not in top_level_words:
             hits.append(("index_without_concurrently", f"on {target}"))
 
-    if head == "DROP" and words[:2] == ("DROP", "INDEX"):
-        if "CONCURRENTLY" not in top_level_words:
-            hits.append(("drop_index_without_concurrently", ", ".join(shapes.dropped_indexes(stmt))))
+    if words[:2] == ("DROP", "INDEX") and "CONCURRENTLY" not in top_level_words:
+        hits.append(("drop_index_without_concurrently", ", ".join(shapes.dropped_indexes(stmt))))
 
     if head == "VACUUM" and "FULL" in words:
         hits.append(("exclusive_maintenance", "VACUUM FULL"))
@@ -632,9 +634,7 @@ def _takes_ddl_lock(stmt: Statement, alter, state: State) -> bool:
         return True
     if head in ("TRUNCATE", "CLUSTER", "REINDEX"):
         return True
-    if head == "VACUUM" and "FULL" in words:
-        return True
-    return False
+    return head == "VACUUM" and "FULL" in words
 
 
 def _advance(stmt: Statement, state: State) -> None:
@@ -682,18 +682,22 @@ def _pragma_problems(script: Script) -> list[Problem]:
         if pragma.verb == "runner":
             if pragma.argument.lower() not in ("autocommit", "transactional"):
                 problems.append(
-                    Problem(pragma.line, f"runner must be autocommit or transactional, got {pragma.argument!r}")
+                    Problem(
+                        pragma.line,
+                        f"runner must be autocommit or transactional, got {pragma.argument!r}",
+                    )
                 )
             elif pragma.offset > first_offset:
-                problems.append(
-                    Problem(pragma.line, "a runner pragma after the first statement is ignored")
-                )
+                problems.append(Problem(pragma.line, "a runner pragma after the first statement is ignored"))
             continue
         if pragma.argument not in RULES_BY_ID:
             problems.append(Problem(pragma.line, f"allow names no such rule: {pragma.argument!r}"))
         elif len(pragma.reason) < 12:
             problems.append(
-                Problem(pragma.line, f"allow {pragma.argument} needs a reason of at least 12 characters")
+                Problem(
+                    pragma.line,
+                    f"allow {pragma.argument} needs a reason of at least 12 characters",
+                )
             )
     for pragma in script.trailing_pragmas:
         if pragma.verb == "allow":
@@ -714,9 +718,9 @@ def analyse(text: str, path: str = "<text>", runner: str | None = None) -> Analy
         state.tx = ids[position]
         state.in_block = blocks[position]
         alter = shapes.alter_table(statement)
-        if alter is not None and state.is_new(alter.target):
-            skipped += 1
-        elif shapes.index_target(statement) and state.is_new(shapes.index_target(statement)):
+        if (alter is not None and state.is_new(alter.target)) or (
+            shapes.index_target(statement) and state.is_new(shapes.index_target(statement))
+        ):
             skipped += 1
         for rule_id, detail in _check_statement(statement, state):
             rule = RULES_BY_ID[rule_id]
