@@ -60,4 +60,5 @@ $batch$;
 -- customer_note and the old pods have drained.
 DROP TRIGGER orders_note_sync ON app.orders;
 
+-- pgsafe: allow drop_column_breaks_readers nothing names note any more, and this line belongs in a later migration than the rest of this file
 ALTER TABLE app.orders DROP COLUMN note;

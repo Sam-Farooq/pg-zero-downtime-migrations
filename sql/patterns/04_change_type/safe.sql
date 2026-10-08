@@ -25,6 +25,12 @@
 SET lock_timeout = '3s';
 
 -- 1. Free, because pg_cast says binary coercible and the modifier only widens.
+--
+-- The linter cannot see the type this column is coming from, so it refuses the
+-- statement until somebody writes the verdict down. That is what the pragma is:
+-- the answer pgsafe.type_change() gave, recorded in the migration that relies on it.
+--
+-- pgsafe: allow type_change_needs_a_verdict pgsafe.type_change('varchar(32)','varchar(64)') returns no_rewrite, binary coercible with a looser modifier
 ALTER TABLE app.orders ALTER COLUMN reference TYPE varchar(64);
 
 -- 2. Ask the catalogue rather than guessing. Both rows print a cost and a reason.
@@ -77,4 +83,5 @@ ALTER TABLE app.orders DROP CONSTRAINT orders_legacy_amount_big_not_null;
 -- line in a migration file.
 DROP TRIGGER orders_legacy_amount_sync ON app.orders;
 
+-- pgsafe: allow drop_column_breaks_readers every reader moved to legacy_amount_big in the release before this one
 ALTER TABLE app.orders DROP COLUMN legacy_amount;
