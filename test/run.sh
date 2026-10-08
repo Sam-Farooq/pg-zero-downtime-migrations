@@ -68,7 +68,11 @@ tap() {
 build "$SAFE_DB"
 build "$UNSAFE_DB"
 
-for file in test/pgtap/0[1-6]_*.sql; do
+# Every file but the end state one, which has to wait for the catalogue.
+for file in $(ls test/pgtap/*.sql | sort); do
+    case "$file" in
+        *90_pattern_end_state.sql) continue ;;
+    esac
     tap "$SAFE_DB" "$file"
 done
 
@@ -80,7 +84,7 @@ for directory in sql/patterns/*/; do
     apply "$UNSAFE_DB" "$directory/unsafe.sql"
 done
 
-tap "$SAFE_DB" test/pgtap/07_pattern_end_state.sql
+tap "$SAFE_DB" test/pgtap/90_pattern_end_state.sql
 
 echo "# $assertions assertions, $failures file(s) with a failure"
 if [ "$failures" -gt 0 ]; then

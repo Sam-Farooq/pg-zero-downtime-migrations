@@ -36,7 +36,7 @@ ALTER TABLE app.orders
 -- to do, so an interrupted run resumes instead of starting again. COMMIT inside
 -- a DO block requires the block to run at the top level, which is why this file
 -- declares the autocommit runner above.
-DO $batch$
+DO LANGUAGE plpgsql $batch$
 DECLARE
     moved integer;
 BEGIN

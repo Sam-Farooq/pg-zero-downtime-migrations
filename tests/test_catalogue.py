@@ -18,6 +18,17 @@ from pgsafe.rules import RULES, analyse
 
 LOCK_MATRIX = Path("sql/lib/02_lock_matrix.sql")
 
+#: A line that starts an assertion, which is how the plan count is checked
+#: against what a file actually runs. A data loading SELECT inside a file is
+#: indented, so it is not one of these.
+ASSERTION_LINE = re.compile(
+    r"^SELECT (?:ok|is|isnt|is_empty|isnt_empty|throws_ok|lives_ok|matches|results_eq"
+    r"|has_schema|has_table|has_view|has_function|has_column|hasnt_column"
+    r"|col_not_null|col_type_is)\(",
+    re.MULTILINE,
+)
+TOTAL_ASSERTIONS = 196
+
 
 def test_every_pattern_directory_holds_a_runnable_pair(pattern_dirs):
     assert len(pattern_dirs) == 7
@@ -149,7 +160,7 @@ def _names(pattern: str, paths: list[Path]) -> set[str]:
 def test_everything_the_suite_calls_is_defined_by_the_library(repo: Path):
     library = sorted((repo / "sql" / "lib").glob("*.sql"))
     defined = _names(
-        r"CREATE (?:OR REPLACE )?(?:FUNCTION|VIEW|TABLE IF NOT EXISTS|TYPE) pgsafe\.(\w+)",
+        r"CREATE (?:OR REPLACE )?(?:FUNCTION|PROCEDURE|VIEW|TABLE IF NOT EXISTS|TYPE) pgsafe\.(\w+)",
         library,
     )
     callers = sorted((repo / "test" / "pgtap").glob("*.sql")) + sorted(
@@ -177,8 +188,7 @@ def test_the_pgtap_plan_counts_match_the_assertions_in_each_file(repo: Path):
     for path in sorted((repo / "test" / "pgtap").glob("*.sql")):
         text = path.read_text()
         planned = int(re.search(r"SELECT plan\((\d+)\);", text).group(1))
-        lines = [line for line in text.splitlines() if line.startswith("SELECT ")]
-        ran = len(lines) - 2  # the plan line and the finish line
+        ran = len(ASSERTION_LINE.findall(text))
         assert planned == ran, f"{path.name}: plan({planned}) but {ran} assertions"
         total += planned
-    assert total == 147, total
+    assert total == TOTAL_ASSERTIONS, total

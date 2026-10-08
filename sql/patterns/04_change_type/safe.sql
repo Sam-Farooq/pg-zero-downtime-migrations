@@ -46,7 +46,7 @@ CREATE TRIGGER orders_legacy_amount_sync
     FOR EACH ROW EXECUTE FUNCTION pgsafe.sync_column_pair('legacy_amount', 'legacy_amount_big');
 
 -- 5. The rows that were there before the trigger.
-DO $batch$
+DO LANGUAGE plpgsql $batch$
 DECLARE
     moved integer;
 BEGIN

@@ -111,7 +111,7 @@ BEGIN
     END IF;
 
     RETURN format(
-$fmt$DO $batch$
+$fmt$DO LANGUAGE plpgsql $batch$
 DECLARE
     moved integer;
 BEGIN

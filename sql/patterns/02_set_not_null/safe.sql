@@ -22,7 +22,7 @@
 SET lock_timeout = '3s';
 
 -- 1. Fill the gaps, in batches that commit.
-DO $batch$
+DO LANGUAGE plpgsql $batch$
 DECLARE
     moved integer;
 BEGIN

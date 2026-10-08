@@ -34,7 +34,7 @@ CREATE TRIGGER orders_note_sync
 
 -- 3. Migrate the rows that predate the trigger. A row written since step 2 is
 -- already correct, so this only has the older ones to do.
-DO $batch$
+DO LANGUAGE plpgsql $batch$
 DECLARE
     moved integer;
 BEGIN

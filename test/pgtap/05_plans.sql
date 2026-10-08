@@ -1,7 +1,7 @@
 -- The generators. Every assertion here is about the text of a plan, which is
 -- what somebody is going to paste into psql.
 BEGIN;
-SELECT plan(36);
+SELECT plan(35);
 
 CREATE SCHEMA pgsafe_test;
 CREATE TABLE pgsafe_test.orders (
@@ -23,8 +23,8 @@ CREATE TABLE pgsafe_test.composite (
 CREATE TABLE pgsafe_test.keyless (anything text);
 CREATE INDEX orders_reference_idx ON pgsafe_test.orders (reference);
 INSERT INTO pgsafe_test.orders (customer_id, reference, amount, note)
-SELECT 1, 'R' || g, g, CASE WHEN g % 2 = 0 THEN NULL ELSE 'n' END
-  FROM generate_series(1, 10) AS g;
+    SELECT 1, 'R' || g, g, CASE WHEN g % 2 = 0 THEN NULL ELSE 'n' END
+      FROM generate_series(1, 10) AS g;
 
 -- plan_set_not_null
 SELECT is(
