@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: SET NOT NULL on a column that still has nulls in it, preceded by the
 -- update that fills them.
 --

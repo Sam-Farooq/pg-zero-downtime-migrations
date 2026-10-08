@@ -87,6 +87,13 @@ class State:
     constraints: dict[str, Constraint] = field(default_factory=dict)
 
     def is_new(self, name: str | None) -> bool:
+        """Was this TABLE created earlier in the same file?
+
+        A statement against a table nobody can read yet cannot block anything,
+        so the rules skip it. The exemption stops at tables: an index created
+        in this file still sits on a live table, and dropping it still takes
+        ACCESS EXCLUSIVE on that table.
+        """
         if name is None:
             return False
         bare = name.split(".")[-1]
@@ -574,11 +581,8 @@ def _check_statement(stmt: Statement, state: State) -> list[tuple[str, str]]:
             hits.append(("index_without_concurrently", f"on {target}"))
 
     if head == "DROP" and words[:2] == ("DROP", "INDEX"):
-        names = shapes.dropped_indexes(stmt)
-        if "CONCURRENTLY" not in top_level_words and not all(
-            state.is_new(name) for name in names
-        ):
-            hits.append(("drop_index_without_concurrently", ", ".join(names)))
+        if "CONCURRENTLY" not in top_level_words:
+            hits.append(("drop_index_without_concurrently", ", ".join(shapes.dropped_indexes(stmt))))
 
     if head == "VACUUM" and "FULL" in words:
         hits.append(("exclusive_maintenance", "VACUUM FULL"))
@@ -625,7 +629,7 @@ def _takes_ddl_lock(stmt: Statement, alter, state: State) -> bool:
     if head == "CREATE" and "INDEX" in words:
         return not state.is_new(shapes.index_target(stmt))
     if words[:2] == ("DROP", "INDEX"):
-        return not all(state.is_new(name) for name in shapes.dropped_indexes(stmt))
+        return True
     if head in ("TRUNCATE", "CLUSTER", "REINDEX"):
         return True
     if head == "VACUUM" and "FULL" in words:
@@ -641,18 +645,6 @@ def _advance(stmt: Statement, state: State) -> None:
     created = shapes.created_relation(stmt)
     if created:
         state.remember(created)
-    if words[0] == "CREATE" and "INDEX" in words:
-        tokens = stmt.tokens
-        cursor = 1
-        while cursor < len(tokens) and tokens[cursor].kind == "word":
-            if tokens[cursor].text.upper() in ("UNIQUE", "INDEX", "CONCURRENTLY", "IF", "NOT", "EXISTS"):
-                cursor += 1
-                continue
-            break
-        name, _ = shapes.read_name(stmt, cursor)
-        if name and name.upper() != "ON":
-            state.remember(name)
-
     assignment = shapes.set_statement(stmt)
     if assignment is not None and assignment.parameter == "lock_timeout":
         if _is_zero(assignment.value):

@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: renaming a column that something already reads.
 --
 -- The statement itself is not the problem. It is a catalogue update, it holds

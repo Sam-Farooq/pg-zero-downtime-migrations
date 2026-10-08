@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: two type changes, both of which rewrite the table.
 --
 -- integer to bigint is the one that surprises people, because the folklore says

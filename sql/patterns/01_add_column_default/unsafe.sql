@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: a new column whose default has to be evaluated per row.
 --
 -- gen_random_uuid() is volatile, so there is no single value PostgreSQL can

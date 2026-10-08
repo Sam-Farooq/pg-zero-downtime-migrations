@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: three index statements that each stop writes.
 --
 -- CREATE INDEX takes SHARE. Reads carry on, and every INSERT, UPDATE and DELETE

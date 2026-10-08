@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: three ways to get the lock wait wrong, on a statement that is itself
 -- harmless.
 --

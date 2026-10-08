@@ -1,3 +1,5 @@
+-- pgsafe: runner autocommit
+--
 -- UNSAFE: a foreign key added in one statement.
 --
 -- PostgreSQL has to prove that every row in app.orders already has a matching
