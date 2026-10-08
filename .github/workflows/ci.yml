@@ -1,0 +1,86 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    # Everything that needs no database: the linter's own tests, and every .sql
+    # file in the repository through libpg_query, which is PostgreSQL's parser
+    # compiled as a library.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install
+        run: pip install -e ".[dev]"
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: ruff format
+        run: ruff format --check .
+
+      - name: pytest
+        run: pytest
+
+      - name: the safe half of every pattern has to pass the linter
+        run: pgsafe check sql/patterns/*/safe.sql
+
+      - name: and the unsafe half has to fail it
+        run: |
+          for file in sql/patterns/*/unsafe.sql; do
+              if pgsafe check "$file" > /dev/null; then
+                  echo "$file passed the linter, which means a rule is missing"
+                  exit 1
+              fi
+          done
+          echo "all 7 unsafe halves were caught"
+
+  pgtap:
+    # The pattern SQL, run against a real PostgreSQL 16.
+    #
+    # The container is started here rather than declared under services:
+    # because pgTAP is not in the postgres image and a service container cannot
+    # be given an install step. Starting it explicitly also lets the repository
+    # be mounted, so psql runs inside the container and the runner needs no
+    # client of its own.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: start postgres 16
+        run: |
+          docker run --detach --name pgzdm \
+              --env POSTGRES_PASSWORD=postgres \
+              --volume "$PWD":/repo \
+              --workdir /repo \
+              postgres:16
+          for attempt in $(seq 1 30); do
+              if docker exec pgzdm pg_isready --username postgres --quiet; then
+                  break
+              fi
+              sleep 2
+          done
+          docker exec pgzdm psql --username postgres --command 'SELECT version()'
+
+      - name: install pgTAP
+        run: |
+          docker exec pgzdm sh -c \
+              'apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-16-pgtap'
+
+      - name: run the suite
+        run: docker exec --user postgres --workdir /repo pgzdm bash test/run.sh
+
+      - name: postgres log on failure
+        if: failure()
+        run: docker logs --tail 200 pgzdm
