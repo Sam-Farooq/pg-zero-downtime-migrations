@@ -48,6 +48,13 @@ BEGIN
         END IF;
     END IF;
 
+    -- A bare "char" in DDL means character(1), while to_regtype('char') resolves
+    -- the internal single byte type instead. Spelling it out keeps the bpchar
+    -- rules below reachable from the way people actually write it.
+    IF lower(base) = 'char' THEN
+        base := 'character';
+    END IF;
+
     resolved := to_regtype(base);
     IF resolved IS NULL THEN
         RAISE EXCEPTION 'not a type this server knows: %', base
@@ -138,8 +145,9 @@ BEGIN
     IF NOT FOUND THEN
         RETURN (
             'cast_required',
-            format('pg_cast has no entry from %s to %s, so the statement needs a USING '
-                   'clause and writes every row', src.base, dst.base)
+            format('pg_cast has no entry from %s to %s. PostgreSQL may still reach it '
+                   'through an I/O conversion, and either way every row is converted and '
+                   'written', src.base, dst.base)
         )::pgsafe.type_change_verdict;
     END IF;
 

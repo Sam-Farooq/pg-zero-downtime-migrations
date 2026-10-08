@@ -137,3 +137,48 @@ def test_the_fixture_owns_the_columns_the_patterns_change(repo: Path):
         "customer_id",
     ):
         assert column in fixture, column
+
+
+def _names(pattern: str, paths: list[Path]) -> set[str]:
+    found: set[str] = set()
+    for path in paths:
+        found |= set(re.findall(pattern, path.read_text()))
+    return found
+
+
+def test_everything_the_suite_calls_is_defined_by_the_library(repo: Path):
+    library = sorted((repo / "sql" / "lib").glob("*.sql"))
+    defined = _names(
+        r"CREATE (?:OR REPLACE )?(?:FUNCTION|VIEW|TABLE IF NOT EXISTS|TYPE) pgsafe\.(\w+)",
+        library,
+    )
+    callers = sorted((repo / "test" / "pgtap").glob("*.sql")) + sorted(
+        (repo / "sql" / "patterns").rglob("*.sql")
+    )
+    referenced = _names(r"pgsafe\.(\w+)", callers)
+    assert referenced, "no references found, the regex is wrong"
+    assert referenced <= defined, referenced - defined
+
+
+def test_every_function_in_the_library_is_exercised_by_the_pgtap_suite(repo: Path):
+    library = sorted((repo / "sql" / "lib").glob("*.sql"))
+    functions = _names(r"CREATE OR REPLACE FUNCTION pgsafe\.(\w+)", library)
+    suite = sorted((repo / "test" / "pgtap").glob("*.sql"))
+    referenced = _names(r"pgsafe\.(\w+)", suite)
+    assert len(functions) >= 25
+    assert functions <= referenced, functions - referenced
+
+
+def test_the_pgtap_plan_counts_match_the_assertions_in_each_file(repo: Path):
+    # A pgTAP file whose plan disagrees with what it runs reports a mismatch as
+    # a comment rather than as a failure, so test/run.sh greps for that too.
+    # This keeps the two numbers equal in the first place.
+    total = 0
+    for path in sorted((repo / "test" / "pgtap").glob("*.sql")):
+        text = path.read_text()
+        planned = int(re.search(r"SELECT plan\((\d+)\);", text).group(1))
+        lines = [line for line in text.splitlines() if line.startswith("SELECT ")]
+        ran = len(lines) - 2  # the plan line and the finish line
+        assert planned == ran, f"{path.name}: plan({planned}) but {ran} assertions"
+        total += planned
+    assert total == 147, total
