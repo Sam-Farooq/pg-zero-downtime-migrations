@@ -1,7 +1,7 @@
 -- The generators. Every assertion here is about the text of a plan, which is
 -- what somebody is going to paste into psql.
 BEGIN;
-SELECT plan(35);
+SELECT plan(40);
 
 CREATE SCHEMA pgsafe_test;
 CREATE TABLE pgsafe_test.orders (
@@ -111,6 +111,40 @@ SELECT throws_ok(
     '42704',
     NULL,
     'and so is a type the server does not know'
+);
+
+-- not_null_steps
+--
+-- Separate from plan_set_not_null on purpose, and these are the assertions that
+-- say why. plan_add_column delegates here for a column that does not exist yet,
+-- because the steps above it in that plan are the ones that create it. It used
+-- to delegate to plan_set_not_null, which refuses a column it cannot find, so
+-- `plan_add_column(..., p_not_null := true)` raised undefined_column every time
+-- and the whole branch was dead.
+SELECT is(
+    (SELECT count(*) FROM pgsafe.not_null_steps('pgsafe_test.orders', 'not_a_column'))::bigint,
+    4::bigint,
+    'not_null_steps plans for a column that does not exist, which is the point of it'
+);
+SELECT is(
+    (SELECT count(*) FROM pgsafe.not_null_steps('pgsafe_test.orders', 'not_a_column', NULL, false))::bigint,
+    3::bigint,
+    'and drops the optional DROP CONSTRAINT when it is told not to'
+);
+SELECT ok(
+    (SELECT statement FROM pgsafe.not_null_steps('pgsafe_test.orders', 'not_a_column') WHERE step = 1)
+        LIKE '%NOT VALID;',
+    'the CHECK goes on NOT VALID so nothing scans under the lock'
+);
+SELECT ok(
+    (SELECT statement FROM pgsafe.not_null_steps('pgsafe_test.orders', 'c', 'my_check') WHERE step = 1)
+        LIKE '%ADD CONSTRAINT my_check %',
+    'and an explicit constraint name is used rather than the derived one'
+);
+SELECT is(
+    (SELECT count(*) FROM pgsafe.plan_add_column('pgsafe_test.orders', 'public_id', 'uuid', 'gen_random_uuid()', true))::bigint,
+    7::bigint,
+    'so plan_add_column with p_not_null builds a plan rather than raising'
 );
 
 -- plan_change_type

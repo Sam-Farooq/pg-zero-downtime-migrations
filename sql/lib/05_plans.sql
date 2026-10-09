@@ -137,7 +137,11 @@ END
 $$;
 
 -- SET NOT NULL without the scan that holds ACCESS EXCLUSIVE over the table.
-CREATE OR REPLACE FUNCTION pgsafe.plan_set_not_null(
+-- The four steps that take a nullable column to NOT NULL without a blocking
+-- scan. Asks the catalogue nothing on purpose: plan_add_column needs these
+-- steps for a column that does not exist yet, and a plan describes what to run
+-- rather than asserting what is already there.
+CREATE OR REPLACE FUNCTION pgsafe.not_null_steps(
     p_table      regclass,
     p_column     name,
     p_constraint name DEFAULT NULL,
@@ -148,24 +152,8 @@ LANGUAGE plpgsql
 STABLE
 AS $$
 DECLARE
-    already_set boolean;
-    check_name  name;
+    check_name name;
 BEGIN
-    SELECT a.attnotnull INTO already_set
-      FROM pg_attribute a
-     WHERE a.attrelid = p_table AND a.attname = p_column
-       AND a.attnum > 0 AND NOT a.attisdropped;
-
-    IF already_set IS NULL THEN
-        RAISE EXCEPTION 'column %.% does not exist', p_table::text, p_column
-            USING ERRCODE = 'undefined_column';
-    END IF;
-
-    IF already_set THEN
-        RAISE NOTICE '%.% is already NOT NULL', p_table::text, p_column;
-        RETURN;
-    END IF;
-
     check_name := coalesce(
         p_constraint,
         left(format('%s_%s_not_null', pgsafe.relation_name(p_table), p_column), 63)::name
@@ -205,6 +193,42 @@ BEGIN
             'Optional. The CHECK is redundant now, and keeping it costs a second expression evaluated on every write.'
         )::pgsafe.step;
     END IF;
+END
+$$;
+
+-- SET NOT NULL without the scan that holds ACCESS EXCLUSIVE over the table.
+-- This is the entry point for a column that already exists, so it answers the
+-- catalogue questions first and then emits the same steps.
+CREATE OR REPLACE FUNCTION pgsafe.plan_set_not_null(
+    p_table      regclass,
+    p_column     name,
+    p_constraint name DEFAULT NULL,
+    p_drop_check boolean DEFAULT true
+)
+RETURNS SETOF pgsafe.step
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    already_set boolean;
+BEGIN
+    SELECT a.attnotnull INTO already_set
+      FROM pg_attribute a
+     WHERE a.attrelid = p_table AND a.attname = p_column
+       AND a.attnum > 0 AND NOT a.attisdropped;
+
+    IF already_set IS NULL THEN
+        RAISE EXCEPTION 'column %.% does not exist', p_table::text, p_column
+            USING ERRCODE = 'undefined_column';
+    END IF;
+
+    IF already_set THEN
+        RAISE NOTICE '%.% is already NOT NULL', p_table::text, p_column;
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+        SELECT * FROM pgsafe.not_null_steps(p_table, p_column, p_constraint, p_drop_check);
 END
 $$;
 
@@ -289,7 +313,10 @@ BEGIN
     )::pgsafe.step;
 
     IF p_not_null THEN
-        FOR sub IN SELECT * FROM pgsafe.plan_set_not_null(p_table, p_column) LOOP
+        -- not_null_steps, not plan_set_not_null: the steps above are what add
+        -- the column, so it does not exist while this plan is being built and
+        -- plan_set_not_null would raise undefined_column every single time.
+        FOR sub IN SELECT * FROM pgsafe.not_null_steps(p_table, p_column) LOOP
             step_no := step_no + 1;
             RETURN NEXT (
                 step_no, tx_no + sub.tx, sub.statement, sub.lock_mode, sub.work, sub.note
