@@ -156,13 +156,34 @@ RETURNS boolean
 LANGUAGE plpgsql
 STABLE
 AS $$
+DECLARE
+    parsed pgsafe.parsed_type;
+    limit_ integer;
 BEGIN
     -- STABLE rather than IMMUTABLE: resolving the target type reads the
     -- catalogues, and so does the cast.
-    PERFORM pgsafe.parse_type(p_type);
+    parsed := pgsafe.parse_type(p_type);
 
     IF p_value IS NULL THEN
         RETURN true;
+    END IF;
+
+    -- A cast cannot answer the length question for the character types, and
+    -- this function exists to answer it. `SELECT '1234'::varchar(3)` succeeds
+    -- and returns '123', because an explicit cast to a length-limited character
+    -- type TRUNCATES. An ALTER TABLE ... TYPE is an assignment, not a cast, and
+    -- assignment raises 22001 string_data_right_truncation instead. So the
+    -- question this was asked, "would a type change reject this value", had the
+    -- answer true for every string however long.
+    --
+    -- Only the character types need this. numeric(p,s) already raises
+    -- numeric_value_out_of_range on a cast, and the test below pins that.
+    IF parsed.base IN ('character varying'::regtype, 'character'::regtype)
+       AND parsed.modifier IS NOT NULL THEN
+        limit_ := split_part(parsed.modifier, ',', 1)::integer;
+        IF length(p_value) > limit_ THEN
+            RETURN false;
+        END IF;
     END IF;
 
     BEGIN

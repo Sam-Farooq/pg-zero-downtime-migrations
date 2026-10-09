@@ -1,6 +1,6 @@
 -- The data questions, asked with a SELECT instead of with a lock.
 BEGIN;
-SELECT plan(24);
+SELECT plan(30);
 
 CREATE SCHEMA pgsafe_test;
 CREATE TABLE pgsafe_test.customers (
@@ -113,6 +113,16 @@ SELECT ok(pgsafe.value_fits('42', 'integer'), '42 fits an integer');
 SELECT ok(NOT pgsafe.value_fits('not a number', 'integer'), 'a word does not');
 SELECT ok(pgsafe.value_fits(NULL, 'integer'), 'and a null fits anything, because the cast is never run');
 SELECT ok(NOT pgsafe.value_fits('123456789012345', 'varchar(3)'), 'a value longer than the limit does not fit');
+-- The boundary, because a length check is the kind of fix that lands off by one.
+SELECT ok(pgsafe.value_fits('abc', 'varchar(3)'), 'a value exactly at the limit fits');
+SELECT ok(NOT pgsafe.value_fits('abcd', 'varchar(3)'), 'one character over does not');
+SELECT ok(pgsafe.value_fits('abcd', 'varchar'), 'and varchar with no limit takes anything');
+-- character(n) truncates on a cast exactly as varchar(n) does.
+SELECT ok(NOT pgsafe.value_fits('abcd', 'char(3)'), 'char(3) rejects an over-long value too');
+-- numeric needs no special case: a cast already raises on overflow, and this
+-- pins that so the character-only scope of the length check stays honest.
+SELECT ok(NOT pgsafe.value_fits('123456', 'numeric(3,0)'), 'numeric overflow is caught by the cast');
+SELECT ok(pgsafe.value_fits('12.34', 'numeric(4,2)'), 'and a value that fits the precision passes');
 SELECT throws_ok(
     $$SELECT pgsafe.value_fits('42', 'nonesuch')$$,
     '42704',
