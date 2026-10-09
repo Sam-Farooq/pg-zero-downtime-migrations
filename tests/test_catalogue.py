@@ -27,7 +27,7 @@ ASSERTION_LINE = re.compile(
     r"|col_not_null|col_type_is)\(",
     re.MULTILINE,
 )
-TOTAL_ASSERTIONS = 220
+TOTAL_ASSERTIONS = 232
 
 
 def test_every_pattern_directory_holds_a_runnable_pair(pattern_dirs):

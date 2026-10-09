@@ -13,8 +13,8 @@ sql/patterns/NN_name/unsafe.sql    the statement somebody wrote
                      safe.sql      the same change, with the lock accounted for
 sql/lib/*.sql                      the library the safe halves use
 pgsafe/                            the linter, 20 rules, zero dependencies
-test/pgtap/                        220 assertions against a real PostgreSQL 16
-tests/                             179 tests that need no database
+test/pgtap/                        232 assertions against a real PostgreSQL 16
+tests/                              tests that need no database
 ```
 
 ## The catalogue
@@ -244,7 +244,7 @@ python3.11 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev]"
 
-pytest                                   # 179 tests, no database, no network
+pytest                                   #  tests, no database, no network
 ruff check . && ruff format --check .
 
 pgsafe check sql/patterns/*/safe.sql     # exits 0
@@ -294,7 +294,7 @@ PL/pgSQL parser over the function bodies that the SQL grammar sees only as strin
 literals. It proves syntax, on a runner with no database. It proves nothing about
 behaviour.
 
-**220 pgTAP assertions across 11 files**, which is the part that needs a server:
+**232 pgTAP assertions across 11 files**, which is the part that needs a server:
 the conflict matrix, the type verdicts, the guards, the plans, the trigger, the
 plan runner, the data assertions, the partition functions, and the end state the
 catalogue leaves behind. The last of those,
@@ -313,11 +313,17 @@ has no runtime dependencies.
 The Python tests and the linters ran here, and the numbers above come from those
 runs: 179 passing, clean under both ruff checks.
 
-**The SQL has never been executed in this repository.** Every `.sql` file parses
-under PostgreSQL's own grammar, and that is all that has happened to it. The
-pgTAP suite is wired into CI, where a container is started, pgTAP is installed
-into it and `test/run.sh` runs, and that is the first place any of this SQL will
-meet a server. Until a run is green, treat the 220 assertions as unproven.
+**The SQL has now been executed, on one laptop and not in CI.** `test/run.sh`
+has been run against a Homebrew PostgreSQL 16.15 on macOS with pgTAP 1.3.4:
+232 assertions across 11 files, 0 failures, both throwaway databases built from
+the catalogue and dropped again. That is the only server this SQL has met.
+
+The pgTAP job in `.github/workflows/ci.yml` starts its own container and has
+**not** run, because this repository has no remote and nothing has been pushed.
+So the assertions are proven against one server and one version, which is worth
+more than a parse and less than a matrix: nothing here has been tried on
+PostgreSQL 11 through 15, on a non-Homebrew build, or under a different
+`default_transaction_isolation`.
 
 Nothing in here measured a lock, a duration or a table size:
 
