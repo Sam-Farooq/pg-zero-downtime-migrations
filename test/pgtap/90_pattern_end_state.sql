@@ -3,7 +3,7 @@
 --
 -- No BEGIN here: this file reads committed state that the pattern run produced,
 -- and test/run.sh applies it only to the database where the safe halves ran.
-SELECT plan(25);
+SELECT plan(26);
 
 -- 01_add_column_default
 SELECT has_column('app', 'orders', 'is_gift', 'the constant default column is there');
@@ -39,11 +39,24 @@ SELECT is(
     'orders_reference_key'::name,
     'the unique constraint exists'
 );
+-- ADD CONSTRAINT ... UNIQUE USING INDEX renames the index it adopts to the
+-- constraint's name, which is documented PostgreSQL behaviour, so the name the
+-- pattern built it under is gone by now and cannot be what proves adoption.
+-- What proves it is that no second index exists: a constraint that built its own
+-- would leave orders_reference_uq sitting there beside it.
 SELECT is(
-    (SELECT i.relname FROM pg_constraint c JOIN pg_class i ON i.oid = c.conindid
-      WHERE c.conname = 'orders_reference_key'),
-    'orders_reference_uq'::name,
-    'and it adopted the index that was built concurrently rather than building its own'
+    (SELECT count(*)::int FROM pg_class WHERE relname = 'orders_reference_uq'),
+    0,
+    'the concurrently built index is not left behind beside the constraint'
+);
+-- NOT indisprimary: orders_pkey is unique too, and counting it made the first
+-- version of this assertion say two where it meant one.
+SELECT is(
+    (SELECT count(*)::int FROM pg_index x
+      WHERE x.indrelid = 'app.orders'::regclass
+        AND x.indisunique AND NOT x.indisprimary),
+    1,
+    'and it adopted that index rather than building a second unique one'
 );
 SELECT is_empty(
     $$SELECT relname FROM pg_class WHERE relname = 'orders_unshipped_idx'$$,
@@ -59,9 +72,11 @@ SELECT is(
 );
 SELECT hasnt_column('app', 'orders', 'legacy_amount', 'the integer column is gone');
 SELECT col_not_null('app', 'orders', 'legacy_amount_big', 'and the bigint one is NOT NULL');
+-- Both sides cast: sum() over a bigint column returns numeric while sum() over
+-- generate_series returns bigint, and is(numeric, bigint, text) has no overload.
 SELECT is(
-    (SELECT sum(legacy_amount_big) FROM app.orders),
-    (SELECT sum((g * 137) % 90000) FROM generate_series(1, 500) AS g),
+    (SELECT sum(legacy_amount_big) FROM app.orders)::numeric,
+    (SELECT sum((g * 137) % 90000) FROM generate_series(1, 500) AS g)::numeric,
     'with every value carried across by the backfill, not just the row count'
 );
 
